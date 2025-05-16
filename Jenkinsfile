@@ -8,9 +8,9 @@ pipeline {
 
     /* ── global env ─────────────────────────────────────────────── */
     environment {
-    /* expose Docker & any other Homebrew tools */
-        PATH+LOCAL="/usr/local/bin"
-    }   
+    /* Prepend /usr/local/bin so Jenkins can see Docker */
+        PATH="/usr/local/bin:${env.PATH}"
+    }
 
     /* ── stages ─────────────────────────────────────────────────── */
     stages {
