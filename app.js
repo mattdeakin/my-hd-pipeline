@@ -65,5 +65,5 @@ app.get('/', (_req, res) => res.json({ message: 'Hello, HD world!' }));
 /* -----------------------------------------------------------
  *  4️⃣  Boot
  * --------------------------------------------------------- */
-app.listen(PORT, () => console.log(`🚀  API running on port ${PORT}`));
-module.exports = app;          // exported for Jest
++ /* 4️⃣  Export the app   (only runtime files should listen) */
++ module.exports = app;
