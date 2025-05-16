@@ -21,8 +21,9 @@ pipeline {
     environment {
         IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
 
-        /* 👇  Append the macOS default shell paths that Node wiped out */
-        PATH+SYSTEM = "/usr/bin:/bin"
+        /* 👇  Append the macOS default shell paths that Node might have altered/overwritten */
+        // PATH+SYSTEM = "/usr/bin:/bin" // Original problematic line
+        PATH = "${env.PATH}:/usr/bin:/bin" // Corrected line
     }
 
 
