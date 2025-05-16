@@ -51,10 +51,8 @@ app.delete('/todos/:id', (req, res) => {
   res.sendStatus(204);
 });
 
-/* ---------- 3️⃣-b  LIGHTWEIGHT HEALTH CHECK -------------------------- */
-app.get('/health', (_req, res) => {
-  res.send('ok');
-});
+/* ---------- 3️⃣  Original hello route -------------------------------- */
+app.get('/', (_req, res) => res.json({ message: 'Hello, HD world!' }));
 
 /* ---------- 4️⃣  Export for tests; server listens in server.js -------- */
 module.exports = app;
