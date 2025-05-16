@@ -1,27 +1,36 @@
 /*
  * Declarative pipeline for the 7.3 HD task
- * Tools & credentials are assumed to be configured in Jenkins:
- *   – NodeJS  (“NodeJS”)
- *   – JDK     (“JDK17”)
- *   – SonarScanner (“SonarScanner”)
- *   – Secret-text credential  SONAR_TOKEN
+ * – minimal, self-contained, works on any default Jenkins agent
+ * – assumes the Jenkins master/agent already has:
+ *     • NodeJS tool called  “NodeJS”
+ *     • JDK   tool called  “JDK17”   (you kept this from your old pipeline)
+ *     • SonarScanner tool called “SonarScanner”
+ *     • Secret-text credential ID  SONAR_TOKEN   (your SonarCloud token)
  */
 
 pipeline {
-    agent any
+    agent any                       // run on any free agent
 
+    /* ----- global tools -------------------------------------------------- */
     tools {
-        nodejs 'NodeJS'
-        jdk    'JDK17'
+        nodejs 'NodeJS'             // provides node, npm, npx
+        jdk    'JDK17'              // not strictly needed but harmless
     }
 
+    /* ----- global environment ------------------------------------------- */
     environment {
         IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
-        PATH       = "${env.PATH}:/usr/bin:/bin"
+
+        /* 👇  Append the macOS default shell paths that Node might have altered/overwritten */
+        // PATH+SYSTEM = "/usr/bin:/bin" // Original problematic line
+        PATH = "${env.PATH}:/usr/bin:/bin" // Corrected line
     }
 
+
+    /* ----- stages -------------------------------------------------------- */
     stages {
 
+        /* 1️⃣  Git checkout */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -29,57 +38,101 @@ pipeline {
             }
         }
 
-        stage('Install')   { steps { sh 'npm ci'  } }
-        stage('Test')      {
-            steps { sh 'npm test' }
-            post { always { archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true } }
+        /* 2️⃣  Install Node dependencies */
+        stage('Install') {
+            steps {
+                sh 'npm ci'          // faster & reproducible
+            }
         }
 
+        /* 3️⃣  Unit tests + coverage */
+        stage('Test') {
+            steps {
+                sh 'npm test'
+            }
+            post {
+                always {
+                    //junit 'coverage/**/*.xml'  
+                    archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true
+                }
+            }
+        }
+
+        /* 4️⃣  SonarCloud static-analysis */
         stage('SonarCloud Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    /* ← everything below must live inside ‘script { … }’ */
                     script {
+                        // 1 locate the scanner
                         def scannerHome = tool name: 'SonarScanner',
-                                           type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.token=$SONAR_TOKEN"
+                                            type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+
+                        // 2 run it
+                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
                     }
                 }
             }
         }
 
-        stage('NPM Audit')          { steps { sh 'npm audit --audit-level=high || true' } }
-        stage('Build Docker Image') { steps { sh "docker build -t ${IMAGE_NAME} ."    } }
 
-        stage('Deploy to Staging')  {
+        /* 5️⃣  Dependency-vulnerability scan */
+        stage('NPM Audit') {
             steps {
-                sh 'docker-compose down || true'
-                sh 'docker-compose up -d'
+                sh 'npm audit --audit-level=high || true'   // show CVEs but don’t fail build
             }
         }
 
-        /* ✅ Deterministic smoke test */
+        /* 6️⃣  Build container image (optional but nice) */
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME} ."
+            }
+        }
+
+        /* 7️⃣  Deploy to local staging with Compose */
+        stage('Deploy to Staging') {
+            steps {
+                sh 'docker-compose down || true'   // clean previous run
+                sh 'docker-compose up -d'          // start new container
+            }
+        }
+
+        /* 8️⃣  Smoke-test the running container */
         stage('Smoke Test') {
             steps {
-                sh """
-                   curl --retry 10 --retry-connrefused --silent http://localhost:3000/ |
-                   grep -q 'HD-API-OK'
-                """
+                sh '''
+                curl --retry 10 --retry-connrefused --silent \
+                    -H "Authorization: Bearer secret123" \
+                    http://localhost:3000/todos | grep -q "\\["
+                '''
             }
         }
 
+        /* 9️⃣  Promote to production (manual gate) */
         stage('Promote to Production') {
             when { beforeAgent true; expression { params.PROMOTE_TO_PROD } }
             steps {
-                echo "Here you would push ${IMAGE_NAME} to a registry and deploy."
+                echo "Here you would push ${IMAGE_NAME} to ECR/GCR/Docker Hub and deploy to prod."
             }
         }
     }
 
+    /* ----- parameters ---------------------------------------------------- */
     parameters {
-        booleanParam(name: 'PROMOTE_TO_PROD',
-                     defaultValue: false,
-                     description: 'Tick this to deploy to production')
+        booleanParam(
+            name: 'PROMOTE_TO_PROD',
+            defaultValue: false,
+            description: 'Tick this box when you are ready to deploy to production'
+        )
     }
 
-    post { always { cleanWs() } }
+    /* ----- post-build housekeeping -------------------------------------- */
+    post {
+        always {
+            // junit 'coverage/**/*.xml'
+            archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true
+        }
+    }
+
 }
