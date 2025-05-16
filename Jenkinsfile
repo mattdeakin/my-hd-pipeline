@@ -8,9 +8,7 @@ pipeline {
 
     /* ── global env ─────────────────────────────────────────────── */
     environment {
-        /* prepend Homebrew’s bin dirs so Jenkins can see docker/brew/etc.   */
-        PATH+LOCAL = "/opt/homebrew/bin:/usr/local/bin"
-        /* image tag if you want to push later                            */
+        PATH = "/opt/homebrew/bin:/usr/local/bin:${env.PATH}"
         IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
     }
 
