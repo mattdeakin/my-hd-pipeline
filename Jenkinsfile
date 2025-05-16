@@ -101,7 +101,7 @@ pipeline {
         /* 8️⃣  Smoke-test the running container */
         stage('Smoke Test') {
             steps {
-                sh sh '''
+                sh '''
                 # wait up to ~20 s for the container to finish booting
                 for i in {1..20}; do
                 if curl --silent http://localhost:3000/health >/dev/null 2>&1; then
