@@ -39,8 +39,16 @@ pipeline {
         stage('SonarCloud Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
-                    def scannerHome = tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                    sh "${scannerHome}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
+                    script {                         // ← Imperative Groovy lives here
+                        /* Ask Jenkins for the install path
+                        The short form works because we named
+                        the tool “SonarScanner” in Global Tools. */
+                        def scannerHome = tool 'SonarScanner'
+
+                        // Run the scanner binary
+                        sh "${scannerHome}/bin/sonar-scanner " +
+                        "-Dsonar.login=$SONAR_TOKEN"
+                    }
                 }
             }
         }
