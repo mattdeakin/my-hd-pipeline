@@ -52,7 +52,7 @@ app.delete('/todos/:id', (req, res) => {
 });
 
 /* ---------- 3️⃣  Original hello route -------------------------------- */
-app.get('/', (_req, res) => res.json({ message: 'Hello, HD world!' }));
+app.get('/health', (_req, res) => res.send('ok'));
 
 /* ---------- 4️⃣  Export for tests; server listens in server.js -------- */
 module.exports = app;
