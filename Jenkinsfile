@@ -57,12 +57,19 @@ pipeline {
         stage('SonarCloud Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
-                    def scanner = tool name: 'SonarScanner',
-                                      type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                    sh "${scanner}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
+                    /* ← everything below must live inside ‘script { … }’ */
+                    script {
+                        // 1 locate the scanner
+                        def scannerHome = tool name: 'SonarScanner',
+                                            type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+
+                        // 2 run it
+                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
+                    }
                 }
             }
         }
+
 
         /* 5️⃣  Dependency-vulnerability scan */
         stage('NPM Audit') {
