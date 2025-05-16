@@ -10,6 +10,11 @@ pipeline {
     }
 
     stages {
+
+        stage('Debug Docker availability') {
+            steps { sh 'echo PATH=$PATH && which docker && docker version' }
+        }
+
         /* 1️⃣  CHECKOUT (always) */
         stage('Checkout') {
             steps {
