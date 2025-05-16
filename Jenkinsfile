@@ -8,8 +8,11 @@ pipeline {
 
     /* ── global env ─────────────────────────────────────────────── */
     environment {
-        PATH = "/opt/homebrew/bin:/usr/local/bin:${env.PATH}"
-        IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
+        /*  prepend Homebrew dirs only – Jenkins will  append its own tool paths */
+        PATH+LOCAL = "/opt/homebrew/bin:/usr/local/bin"
+
+        /* example tag for a future push step */
+        IMAGE_NAME = "my-hd-pipeline:${BUILD_NUMBER}"
     }
 
     /* ── stages ─────────────────────────────────────────────────── */
