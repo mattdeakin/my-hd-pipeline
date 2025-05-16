@@ -1,32 +1,36 @@
 /*
  * Declarative pipeline for the 7.3 HD task
- * — minimal, self-contained, works on any default Jenkins agent
- * — assumes the Jenkins master/agent already has:
- *       • NodeJS tool        named  “NodeJS”
- *       • JDK   tool         named  “JDK17”
- *       • SonarScanner tool  named  “SonarScanner”
- *       • Secret-text credential  SONAR_TOKEN  (your SonarCloud token)
+ * – minimal, self-contained, works on any default Jenkins agent
+ * – assumes the Jenkins master/agent already has:
+ *     • NodeJS tool called  “NodeJS”
+ *     • JDK   tool called  “JDK17”   (you kept this from your old pipeline)
+ *     • SonarScanner tool called “SonarScanner”
+ *     • Secret-text credential ID  SONAR_TOKEN   (your SonarCloud token)
  */
 
 pipeline {
-    agent any
+    agent any                       // run on any free agent
 
-    /* ---------- global tools ------------------------------------------- */
+    /* ----- global tools -------------------------------------------------- */
     tools {
-        nodejs 'NodeJS'
-        jdk    'JDK17'
+        nodejs 'NodeJS'             // provides node, npm, npx
+        jdk    'JDK17'              // not strictly needed but harmless
     }
 
-    /* ---------- global environment ------------------------------------- */
+    /* ----- global environment ------------------------------------------- */
     environment {
         IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
-        // keep default PATH; no need for the old workaround
+
+        /* 👇  Append the macOS default shell paths that Node might have altered/overwritten */
+        // PATH+SYSTEM = "/usr/bin:/bin" // Original problematic line
+        PATH = "${env.PATH}:/usr/bin:/bin" // Corrected line
     }
 
-    /* ---------- stages -------------------------------------------------- */
+
+    /* ----- stages -------------------------------------------------------- */
     stages {
 
-        /* 1️⃣  Checkout source ------------------------------------------------ */
+        /* 1️⃣  Git checkout */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -34,90 +38,110 @@ pipeline {
             }
         }
 
-        /* 2️⃣  Install dependencies ----------------------------------------- */
+        /* 2️⃣  Install Node dependencies */
         stage('Install') {
-            steps { sh 'npm ci' }
-        }
-
-        /* 3️⃣  Unit tests ---------------------------------------------------- */
-        stage('Test') {
-            steps { sh 'npm test' }
-            post {
-                always { archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true }
+            steps {
+                sh 'npm ci'          // faster & reproducible
             }
         }
 
-        /* 4️⃣  SonarCloud static analysis ----------------------------------- */
+        /* 3️⃣  Unit tests + coverage */
+        stage('Test') {
+            steps {
+                sh 'npm test'
+            }
+            post {
+                always {
+                    //junit 'coverage/**/*.xml'  
+                    archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true
+                }
+            }
+        }
+
+        /* 4️⃣  SonarCloud static-analysis */
         stage('SonarCloud Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    /* ← everything below must live inside ‘script { … }’ */
                     script {
+                        // 1 locate the scanner
                         def scannerHome = tool name: 'SonarScanner',
-                                             type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        sh "${scannerHome}/bin/sonar-scanner"
+                                            type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+
+                        // 2 run it
+                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
                     }
                 }
             }
         }
 
-        /* 5️⃣  Vulnerability scan ------------------------------------------- */
+
+        /* 5️⃣  Dependency-vulnerability scan */
         stage('NPM Audit') {
-            steps { sh 'npm audit --audit-level=high || true' }
+            steps {
+                sh 'npm audit --audit-level=high || true'   // show CVEs but don’t fail build
+            }
         }
 
-        /* 6️⃣  Build container image ---------------------------------------- */
+        /* 6️⃣  Build container image (optional but nice) */
         stage('Build Docker Image') {
-            steps { sh "docker build -t ${IMAGE_NAME} ." }
+            steps {
+                sh "docker build -t ${IMAGE_NAME} ."
+            }
         }
 
-        /* 7️⃣  Deploy to local staging -------------------------------------- */
+        /* 7️⃣  Deploy to local staging with Compose */
         stage('Deploy to Staging') {
             steps {
-                sh 'docker-compose down || true'   // clear previous run
+                sh 'docker-compose down || true'   // clean previous run
                 sh 'docker-compose up -d'          // start new container
             }
         }
 
-        /* 8️⃣  Smoke test (now waits for /health) --------------------------- */
+        /* 8️⃣  Smoke-test the running container */
         stage('Smoke Test') {
             steps {
-                sh '''
-                # Wait (max 20 s) until the app answers on /health
+                sh sh '''
+                # wait up to ~20 s for the container to finish booting
                 for i in {1..20}; do
-                  if curl --silent http://localhost:3000/health >/dev/null 2>&1; then
+                if curl --silent http://localhost:3000/health >/dev/null 2>&1; then
                     break
-                  fi
-                  sleep 1
+                fi
+                sleep 1
                 done
 
-                # Functional check on /todos (requires auth header)
+                # original functional check (kept exactly the same)
                 curl --retry 10 --retry-connrefused --silent \
-                     -H "Authorization: Bearer secret123" \
-                     http://localhost:3000/todos | grep -q '\\['
+                    -H "Authorization: Bearer secret123" \
+                    http://localhost:3000/todos | grep -q '\\['
                 '''
             }
         }
 
-        /* 9️⃣  Manual promotion gate --------------------------------------- */
+        /* 9️⃣  Promote to production (manual gate) */
         stage('Promote to Production') {
             when { beforeAgent true; expression { params.PROMOTE_TO_PROD } }
             steps {
-                echo "Here you would push ${IMAGE_NAME} to a registry and deploy to prod."
+                echo "Here you would push ${IMAGE_NAME} to ECR/GCR/Docker Hub and deploy to prod."
             }
         }
     }
 
-    /* ---------- parameters ---------------------------------------------- */
+    /* ----- parameters ---------------------------------------------------- */
     parameters {
         booleanParam(
             name: 'PROMOTE_TO_PROD',
             defaultValue: false,
-            description: 'Tick when you are ready to deploy to production'
+            description: 'Tick this box when you are ready to deploy to production'
         )
     }
 
-    /* ---------- post-build housekeeping --------------------------------- */
+    /* ----- post-build housekeeping -------------------------------------- */
     post {
-        always { archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true }
+        always {
+            // junit 'coverage/**/*.xml'
+            archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true
+        }
     }
+
 }
