@@ -13,7 +13,9 @@ pipeline {
         /* 1️⃣  CHECKOUT (always) */
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/your-user/my-hd-pipeline.git'
+                /* Multibranch has already done the clone, but this keeps a
+                visible stage in Blue Ocean.  Takes <1 s. */
+                checkout scm
             }
         }
 
