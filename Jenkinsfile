@@ -1,67 +1,118 @@
+/*
+ * Declarative pipeline for the 7.3 HD task
+ * – minimal, self-contained, works on any default Jenkins agent
+ * – assumes the Jenkins master/agent already has:
+ *     • NodeJS tool called  “NodeJS”
+ *     • JDK   tool called  “JDK17”   (you kept this from your old pipeline)
+ *     • SonarScanner tool called “SonarScanner”
+ *     • Secret-text credential ID  SONAR_TOKEN   (your SonarCloud token)
+ */
+
 pipeline {
-    agent any
+    agent any                       // run on any free agent
 
+    /* ----- global tools -------------------------------------------------- */
     tools {
-        jdk    'JDK17'
-        nodejs 'NodeJS'
+        nodejs 'NodeJS'             // provides node, npm, npx
+        jdk    'JDK17'              // not strictly needed but harmless
     }
 
-    /* ── global env ───────────────────────────────────────────── */
+    /* ----- global environment ------------------------------------------- */
     environment {
-        /* prepend Homebrew & /usr/local to PATH for Jenkins user */
-        PATH+LOCAL="/opt/homebrew/bin:/usr/local/bin"
+        IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"   // e.g. my-hd-pipeline:42
     }
 
-    /* ── stages ───────────────────────────────────────────────── */
+    /* ----- stages -------------------------------------------------------- */
     stages {
 
-        /* 1️⃣  CHECKOUT (Multibranch already cloned, but keeps a stage) */
+        /* 1️⃣  Git checkout */
         stage('Checkout') {
-            steps { checkout scm }
-        }
-
-        /* 2️⃣  BUILD  – just install deps */
-        stage('Build') {
-            steps { sh 'npm ci' }
-        }
-
-        /* 3️⃣  TEST  – Jest with coverage */
-        stage('Test') {
-            steps { sh 'npm test -- --coverage' }
-            post { always { junit 'coverage/**/*.xml' /* ok if file missing */ } }
-        }
-
-        /* 4️⃣  CODE QUALITY – SonarCloud */
-        stage('SonarCloud Analysis') {
             steps {
-                withCredentials([string(credentialsId: 'SONAR_TOKEN',
-                                        variable: 'SONAR_TOKEN')]) {
-                    script {
-                        def scannerHome = tool 'SonarScanner'
-                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.login=$SONAR_TOKEN"
-                    }
+                git branch: 'main',
+                    url: 'https://github.com/mattdeakin/my-hd-pipeline.git'
+            }
+        }
+
+        /* 2️⃣  Install Node dependencies */
+        stage('Install') {
+            steps {
+                sh 'npm ci'          // faster & reproducible
+            }
+        }
+
+        /* 3️⃣  Unit tests + coverage */
+        stage('Test') {
+            steps {
+                sh 'npm test'
+            }
+            post {
+                always {
+                    junit 'coverage/**/*.xml'   // Jest’s JUnit XML if configured
+                    archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true
                 }
             }
         }
 
-        /* 5️⃣  SECURITY – npm audit */
-        stage('NPM Audit (Security Scan)') {
-            steps { sh 'npm audit --audit-level=high || true' }
+        /* 4️⃣  SonarCloud static-analysis */
+        stage('SonarCloud Analysis') {
+            steps {
+                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                    def scanner = tool name: 'SonarScanner',
+                                      type: 'hudson.plugins.sonar.SonarRunnerInstallation'
+                    sh "${scanner}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
+                }
+            }
         }
 
-        /* 6️⃣  RELEASE – stub for “high-HD” */
+        /* 5️⃣  Dependency-vulnerability scan */
+        stage('NPM Audit') {
+            steps {
+                sh 'npm audit --audit-level=high || true'   // show CVEs but don’t fail build
+            }
+        }
+
+        /* 6️⃣  Build container image (optional but nice) */
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME} ."
+            }
+        }
+
+        /* 7️⃣  Deploy to local staging with Compose */
+        stage('Deploy to Staging') {
+            steps {
+                sh 'docker-compose down || true'   // clean previous run
+                sh 'docker-compose up -d'          // start new container
+            }
+        }
+
+        /* 8️⃣  Smoke-test the running container */
+        stage('Smoke Test') {
+            steps {
+                sh 'curl --retry 10 --retry-connrefused --silent http://localhost:3000/ | grep -q "Hello, HD world!"'
+            }
+        }
+
+        /* 9️⃣  Promote to production (manual gate) */
         stage('Promote to Production') {
             when { beforeAgent true; expression { params.PROMOTE_TO_PROD } }
-            steps { echo 'Release placeholder – skipped on local Jenkins.' }
+            steps {
+                echo "Here you would push ${IMAGE_NAME} to ECR/GCR/Docker Hub and deploy to prod."
+            }
         }
     }
 
-    /* ── params & post ───────────────────────────────────────── */
+    /* ----- parameters ---------------------------------------------------- */
     parameters {
-        booleanParam(name: 'PROMOTE_TO_PROD',
-                     defaultValue: false,
-                     description: 'Tick to run the release placeholder')
+        booleanParam(
+            name: 'PROMOTE_TO_PROD',
+            defaultValue: false,
+            description: 'Tick this box when you are ready to deploy to production'
+        )
     }
 
-    post { always { cleanWs() } }
+    /* ----- post-build housekeeping -------------------------------------- */
+    post {
+        always { cleanWs() }         // wipe workspace to keep agents tidy
+    }
 }
