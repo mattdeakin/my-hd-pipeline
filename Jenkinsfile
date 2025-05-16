@@ -52,7 +52,7 @@ pipeline {
             }
             post {
                 always {
-                    junit 'coverage/**/*.xml'   // Jest’s JUnit XML if configured
+                    //junit 'coverage/**/*.xml'  
                     archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true
                 }
             }
@@ -126,8 +126,7 @@ pipeline {
     /* ----- post-build housekeeping -------------------------------------- */
     post {
         always {
-            /* REMOVE the next line ↓ */
-            junit 'coverage/**/*.xml'
+            // junit 'coverage/**/*.xml'
             archiveArtifacts artifacts: 'coverage/**/*.*', fingerprint: true
         }
     }
