@@ -19,8 +19,12 @@ pipeline {
 
     /* ----- global environment ------------------------------------------- */
     environment {
-        IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"   // e.g. my-hd-pipeline:42
+        IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
+
+        /* 👇  Append the macOS default shell paths that Node wiped out */
+        PATH+SYSTEM = "/usr/bin:/bin"
     }
+
 
     /* ----- stages -------------------------------------------------------- */
     stages {
