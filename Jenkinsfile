@@ -6,7 +6,9 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
+        environment {
+        // “PATH+LOCAL” means “take the current PATH and prepend these paths”
+        PATH+LOCAL = "/opt/homebrew/bin:/usr/local/bin"
     }
 
     stages {
