@@ -101,7 +101,11 @@ pipeline {
         /* 8️⃣  Smoke-test the running container */
         stage('Smoke Test') {
             steps {
-                sh 'curl --retry 10 --retry-connrefused --silent http://localhost:3000/ | grep -q "Hello, HD world!"'
+                sh '''
+                curl --retry 10 --retry-connrefused --silent \
+                    -H "Authorization: Bearer secret123" \
+                    http://localhost:3000/todos | grep -q "\\["
+                '''
             }
         }
 
