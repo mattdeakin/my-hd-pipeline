@@ -1,0 +1,9 @@
+{
+  "todos": [
+    {
+      "id": "1",
+      "title": "Say hello to CI/CD!",
+      "completed": false
+    }
+  ]
+}
