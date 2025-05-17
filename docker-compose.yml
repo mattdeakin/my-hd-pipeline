@@ -1,6 +1,11 @@
-version: "3.9"
+# docker-compose.yml  – copy / paste the whole thing
 services:
   api:
     build: .
     ports:
       - "3000:3000"
+    # pass the same key the Jenkins smoke-test uses
+    environment:
+      - API_KEY=secret123
+    # make absolutely sure the correct process starts
+    command: ["node", "server.js"]
