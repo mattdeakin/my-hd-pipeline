@@ -1,7 +1,7 @@
-# Dockerfile  – copy / paste the whole thing
+# Dockerfile
 FROM node:20-alpine
 
-# 1) install production deps only
+# 1) install prod dependencies
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
@@ -9,7 +9,7 @@ RUN npm ci --omit=dev
 # 2) copy the rest of the source
 COPY . .
 
-# 3) the container really listens on 3000
+# 3) container listens on 3000
 EXPOSE 3000
 
 # 4) start the API
