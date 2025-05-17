@@ -102,25 +102,28 @@ pipeline {
         /* 8️⃣  Smoke-test the running container */
         stage('Smoke Test') {
             steps {
+                withEnv(["PATH+EXTRA=${tool 'NodeJS'}/bin"]) {
                 sh '''
-                # Give the container up to 20 s to become healthy
-                for i in {1..20}; do
-                  curl --silent http://localhost:3000/health >/dev/null 2>&1 && break
-                  sleep 1
-                done
+                    # wait until /health returns HTTP-200
+                    for i in {1..30}; do
+                    if curl --silent --fail http://localhost:3000/health > /dev/null; then
+                        break
+                    fi
+                    sleep 1
+                    done
 
-                # Functional check: /todos must return a JSON array
-                for i in {1..20}; do
-                  json=$(curl --silent -H "Authorization: Bearer ${API_KEY:-secret123}" \
-                               http://localhost:3000/todos || true)
-                  echo "Response: $json"
-                  echo "$json" | grep -q '\\[' && break
-                  sleep 1
-                done
+                    # now wait until /todos returns an array
+                    for i in {1..30}; do
+                    json=$(curl --silent -H "Authorization: Bearer secret123" http://localhost:3000/todos)
+                    echo "Response: $json"
+                    echo "$json" | grep -q '\\[' && exit 0
+                    sleep 1
+                    done
 
-                # Fail the stage if the array never appeared
-                echo "$json" | grep -q '\\['
+                    echo "Smoke-test failed"
+                    exit 1
                 '''
+                }
             }
         }
 

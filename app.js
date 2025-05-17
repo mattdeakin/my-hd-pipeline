@@ -1,60 +1,71 @@
-// Standard Express skeleton ---------------------------------------------------
+// app.js
 const express = require('express');
-const { v4: uuid } = require('uuid');
+const fs       = require('fs');
+const path     = require('path');
+
+const API_KEY   = process.env.API_KEY   || 'secret123';
+const DATA_FILE = process.env.DATA_FILE || 'db.json';
 
 const app   = express();
-const PORT  = process.env.PORT || 3000;
-
-// -----------------------------------------------------------------------------
-//  MIDDLEWARE
-// -----------------------------------------------------------------------------
 app.use(express.json());
 
-// very small “bearer token” auth layer
-const API_TOKEN = process.env.API_TOKEN || 'secret123';
+/**
+ * Simple API-key middleware
+ * –  lets “/” through without a key (so the container can start)
+ * –  every other route needs             Bearer <API_KEY>
+ */
 app.use((req, res, next) => {
-  if (req.path === '/health') return next();            // keep /health public
-  if (req.headers.authorization !== `Bearer ${API_TOKEN}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (req.path === '/' ||
+      req.headers.authorization === `Bearer ${API_KEY}`) {
+    return next();
   }
-  return next();
+  res.status(401).json({ error : 'unauthorised' });
 });
 
-// -----------------------------------------------------------------------------
-//  IN-MEMORY (optionally seeded) DATABASE
-// -----------------------------------------------------------------------------
-const todos = [];
-app.locals.todos = todos;                               // <-- visible to server.js
+/* ---- health-check ---- */
+app.get('/health', (_, res) => res.sendStatus(200));
 
-// If server.js set SEED_FROM_DB=true we’ll already have seed data
-// (it pushes straight into app.locals.todos)
-app.get('/health', (_req, res) => res.send('OK'));
+/* ---- in-memory todos ----------------- */
+let todos = [];
 
-// -----------------------------------------------------------------------------
-//  ROUTES
-// -----------------------------------------------------------------------------
-app.get('/',      (_req, res) => res.json({ message: 'Welcome 🚀' }));
+/*  Load seed data if it exists – keeps the
+    container stateless and idempotent      */
+try {
+  const raw = fs.readFileSync(path.resolve(DATA_FILE), 'utf8');
+  const parsed = JSON.parse(raw);
+  todos = Array.isArray(parsed) ? parsed : parsed.todos || [];
+} catch {
+  // first run; ignore
+}
 
-app.get('/todos', (_req, res) => res.json(todos));
+/*  GET /todos  ->  full list  */
+app.get('/todos', (_, res) => res.json(todos));
 
+/*  POST /todos  ->  { title }  */
 app.post('/todos', (req, res) => {
-  const { title } = req.body || {};
-  if (!title) return res.status(400).json({ error: 'title is required' });
-
-  const todo = { id: uuid(), title, completed: false };
+  const { title = '' } = req.body;
+  if (!title.trim()) {
+    return res.status(400).json({ error : 'title required' });
+  }
+  const todo = { id : String(Date.now()), title, completed : false };
   todos.push(todo);
-  return res.status(201).json(todo);
+  res.status(201).json(todo);
 });
 
+/*  PATCH /todos/:id  ->  toggle completed  */
+app.patch('/todos/:id', (req, res) => {
+  const todo = todos.find(t => t.id === req.params.id);
+  if (!todo) return res.status(404).end();
+  todo.completed = !todo.completed;
+  res.json(todo);
+});
+
+/*  DELETE /todos/:id  */
 app.delete('/todos/:id', (req, res) => {
   const idx = todos.findIndex(t => t.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Todo not found' });
-
-  const [removed] = todos.splice(idx, 1);
-  return res.json(removed);
+  if (idx === -1) return res.status(404).end();
+  todos.splice(idx, 1);
+  res.status(204).end();
 });
 
-// -----------------------------------------------------------------------------
-//  EXPORT
-// -----------------------------------------------------------------------------
 module.exports = app;

@@ -1,11 +1,11 @@
 services:
   api:
     build: .
+    image: my-hd-pipeline:latest
+    environment:
+      - NODE_ENV=production
+      - API_KEY=secret123        # keep smoke-test happy
     ports:
       - "3000:3000"
-    environment:
-      - PORT=3000
-      - SEED_FROM_DB=true          # <-- turn on seeding
-      - API_TOKEN=secret123        # <-- keep smoke-test happy
     volumes:
-      - ./db.json:/app/db.json:ro  # seed file available inside container
+      - ./db.json:/app/db.json:ro

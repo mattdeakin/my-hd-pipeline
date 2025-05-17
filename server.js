@@ -4,6 +4,10 @@ const app  = require('./app');
 
 const PORT = process.env.PORT || 3000;
 
+app.listen(port, () => {
+  console.log(`✅  API listening on :${port}`);
+});
+
 // -----------------------------------------------------------------------------
 //  OPTIONAL SEEDING FROM db.json
 // -----------------------------------------------------------------------------
