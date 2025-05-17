@@ -1,11 +1,11 @@
-# docker-compose.yml  – copy / paste the whole thing
 services:
   api:
     build: .
     ports:
       - "3000:3000"
-    # pass the same key the Jenkins smoke-test uses
     environment:
-      - API_KEY=secret123
-    # make absolutely sure the correct process starts
-    command: ["node", "server.js"]
+      - PORT=3000
+      - SEED_FROM_DB=true          # <-- turn on seeding
+      - API_TOKEN=secret123        # <-- keep smoke-test happy
+    volumes:
+      - ./db.json:/app/db.json:ro  # seed file available inside container

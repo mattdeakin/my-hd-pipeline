@@ -1,65 +1,60 @@
-// Simple Express API with token-auth + in-memory CRUD “todos”
+// Standard Express skeleton ---------------------------------------------------
 const express = require('express');
-const app     = express();
+const { v4: uuid } = require('uuid');
 
-/* ---------- 0️⃣  Very-light authentication --------------------------- */
-const API_KEY = process.env.API_KEY || 'secret123';   // same value the pipeline sends
+const app   = express();
+const PORT  = process.env.PORT || 3000;
 
-app.use((req, res, next) => {
-  // completely PUBLIC routes
-  if (req.path === '/' || req.path === '/health') return next();
-
-  // everything else needs the bearer token
-  if (req.headers.authorization === `Bearer ${API_KEY}`) return next();
-
-  return res.sendStatus(401);
-});
-
-/* ---------- 1️⃣  A tiny “I’m alive” check ---------------------------- */
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-
-/* ---------- 2️⃣  JSON body-parser ------------------------------------ */
+// -----------------------------------------------------------------------------
+//  MIDDLEWARE
+// -----------------------------------------------------------------------------
 app.use(express.json());
 
-/* ---------- 2️⃣½  In-memory store ----------------------------------- */
-let nextId = 1;
-const todos = [];
-
-/* CREATE -------------------------------------------------------------- */
-app.post('/todos', (req, res) => {
-  const todo = { id: nextId++, text: req.body.text || '', done: false };
-  todos.push(todo);
-  res.status(201).json(todo);
+// very small “bearer token” auth layer
+const API_TOKEN = process.env.API_TOKEN || 'secret123';
+app.use((req, res, next) => {
+  if (req.path === '/health') return next();            // keep /health public
+  if (req.headers.authorization !== `Bearer ${API_TOKEN}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  return next();
 });
 
-/* READ list ----------------------------------------------------------- */
+// -----------------------------------------------------------------------------
+//  IN-MEMORY (optionally seeded) DATABASE
+// -----------------------------------------------------------------------------
+const todos = [];
+app.locals.todos = todos;                               // <-- visible to server.js
+
+// If server.js set SEED_FROM_DB=true we’ll already have seed data
+// (it pushes straight into app.locals.todos)
+app.get('/health', (_req, res) => res.send('OK'));
+
+// -----------------------------------------------------------------------------
+//  ROUTES
+// -----------------------------------------------------------------------------
+app.get('/',      (_req, res) => res.json({ message: 'Welcome 🚀' }));
+
 app.get('/todos', (_req, res) => res.json(todos));
 
-/* READ one ------------------------------------------------------------ */
-app.get('/todos/:id', (req, res) => {
-  const todo = todos.find(t => t.id == req.params.id);
-  if (!todo) return res.sendStatus(404);
-  res.json(todo);
+app.post('/todos', (req, res) => {
+  const { title } = req.body || {};
+  if (!title) return res.status(400).json({ error: 'title is required' });
+
+  const todo = { id: uuid(), title, completed: false };
+  todos.push(todo);
+  return res.status(201).json(todo);
 });
 
-/* UPDATE -------------------------------------------------------------- */
-app.put('/todos/:id', (req, res) => {
-  const idx = todos.findIndex(t => t.id == req.params.id);
-  if (idx === -1) return res.sendStatus(404);
-  todos[idx] = { ...todos[idx], ...req.body };
-  res.json(todos[idx]);
-});
-
-/* DELETE -------------------------------------------------------------- */
 app.delete('/todos/:id', (req, res) => {
-  const idx = todos.findIndex(t => t.id == req.params.id);
-  if (idx === -1) return res.sendStatus(404);
-  todos.splice(idx, 1);
-  res.sendStatus(204);
+  const idx = todos.findIndex(t => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Todo not found' });
+
+  const [removed] = todos.splice(idx, 1);
+  return res.json(removed);
 });
 
-/* ---------- 3️⃣  Original hello route -------------------------------- */
-app.get('/', (_req, res) => res.json({ message: 'Hello, HD world!' }));
-
-/* ---------- 4️⃣  Export for tests; server listens in server.js -------- */
+// -----------------------------------------------------------------------------
+//  EXPORT
+// -----------------------------------------------------------------------------
 module.exports = app;
