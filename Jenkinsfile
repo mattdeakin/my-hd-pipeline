@@ -99,21 +99,27 @@ pipeline {
         }
 
         /* 8️⃣  Smoke-test the running container */
+        /* 8️⃣  Smoke-test the running container */
         stage('Smoke Test') {
             steps {
                 sh '''
-                # wait up to ~20 s for the container to finish booting
+                # Give the container up to 20 s to become healthy
                 for i in {1..20}; do
-                if curl --silent http://localhost:3000/health >/dev/null 2>&1; then
-                    break
-                fi
-                sleep 1
+                  curl --silent http://localhost:3000/health >/dev/null 2>&1 && break
+                  sleep 1
                 done
 
-                # original functional check (kept exactly the same)
-                curl --retry 10 --retry-connrefused --silent \
-                    -H "Authorization: Bearer secret123" \
-                    http://localhost:3000/todos | grep -q '\\['
+                # Functional check: /todos must return a JSON array
+                for i in {1..20}; do
+                  json=$(curl --silent -H "Authorization: Bearer ${API_KEY:-secret123}" \
+                               http://localhost:3000/todos || true)
+                  echo "Response: $json"
+                  echo "$json" | grep -q '\\[' && break
+                  sleep 1
+                done
+
+                # Fail the stage if the array never appeared
+                echo "$json" | grep -q '\\['
                 '''
             }
         }

@@ -1,41 +1,48 @@
 // Simple Express API with token-auth + in-memory CRUD “todos”
 const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
+const app     = express();
 
-/* ---------- 0️⃣  Very-light authentication ---------------------------- */
-const API_KEY = process.env.API_KEY || 'secret123';   // set in Jenkins if you like
+/* ---------- 0️⃣  Very-light authentication --------------------------- */
+const API_KEY = process.env.API_KEY || 'secret123';   // same value the pipeline sends
+
 app.use((req, res, next) => {
-  if (req.path === '/' || req.headers.authorization === `Bearer ${API_KEY}`) {
-    return next();
-  }
+  // completely PUBLIC routes
+  if (req.path === '/' || req.path === '/health') return next();
+
+  // everything else needs the bearer token
+  if (req.headers.authorization === `Bearer ${API_KEY}`) return next();
+
   return res.sendStatus(401);
 });
 
-/* ---------- 1️⃣  JSON body-parser ------------------------------------ */
+/* ---------- 1️⃣  A tiny “I’m alive” check ---------------------------- */
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+/* ---------- 2️⃣  JSON body-parser ------------------------------------ */
 app.use(express.json());
 
-/* ---------- 2️⃣  In-memory “todos” store ----------------------------- */
+/* ---------- 2️⃣½  In-memory store ----------------------------------- */
 let nextId = 1;
 const todos = [];
 
-/* CREATE */
+/* CREATE -------------------------------------------------------------- */
 app.post('/todos', (req, res) => {
   const todo = { id: nextId++, text: req.body.text || '', done: false };
   todos.push(todo);
   res.status(201).json(todo);
 });
 
-/* READ list */
+/* READ list ----------------------------------------------------------- */
 app.get('/todos', (_req, res) => res.json(todos));
 
-/* READ one */
+/* READ one ------------------------------------------------------------ */
 app.get('/todos/:id', (req, res) => {
   const todo = todos.find(t => t.id == req.params.id);
-  return todo ? res.json(todo) : res.sendStatus(404);
+  if (!todo) return res.sendStatus(404);
+  res.json(todo);
 });
 
-/* UPDATE */
+/* UPDATE -------------------------------------------------------------- */
 app.put('/todos/:id', (req, res) => {
   const idx = todos.findIndex(t => t.id == req.params.id);
   if (idx === -1) return res.sendStatus(404);
@@ -43,7 +50,7 @@ app.put('/todos/:id', (req, res) => {
   res.json(todos[idx]);
 });
 
-/* DELETE */
+/* DELETE -------------------------------------------------------------- */
 app.delete('/todos/:id', (req, res) => {
   const idx = todos.findIndex(t => t.id == req.params.id);
   if (idx === -1) return res.sendStatus(404);
