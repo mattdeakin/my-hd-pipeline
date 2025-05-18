@@ -1,8 +1,8 @@
 pipeline {
     agent any                       
     tools {
-        nodejs 'NodeJS'             // provides node, npm, npx
-        jdk    'JDK17'              // not strictly needed but harmless
+        nodejs 'NodeJS'            
+        jdk    'JDK17'          
     }
     environment {
         IMAGE_NAME = "my-hd-pipeline:${env.BUILD_NUMBER}"
